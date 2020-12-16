@@ -2,11 +2,16 @@
 #是否自动设定各个列属性的类型，如果为true就默认为String，不然得自己设定
 isAutoColumnType=true
 #################kafka安全配置#################
-kafkaSecuredMode = 
-saslKerberosServiceName = 
-principal = 
-keytabPath = 
-#################kafka安全配置#################
+=======
+# 说明
+bootstrapServerAddress = 172.18.120.27:9092,172.18.120.28:9092,172.18.120.29:9092,172.18.120.30:9092
+ZkAddress = 172.18.120.30
+kafkaTopic = test09
+#kafka是否开启压缩,默认是none，可选gzip，snappy，lz4，zstd
+compressionCodec = snappy
+
+#column数量（包含rowkey）
+columnNum = 6
 
 #################kafka配置#################
 bootstrapServerAddress = 172.18.120.27:9092,172.18.120.28:9092,172.18.120.29:9092,172.18.120.30:9092
@@ -74,7 +79,6 @@ tpsPerThread = 100000
 #启动发送的线程个数
 threadNum = 24
 #################发送邮件配置#################
-
 
 #gg.handler.tdthandler.SaslKerberosServiceName=kafka
 #gg.handler.tdthandler.Principal=admin@SGIDCTDH
