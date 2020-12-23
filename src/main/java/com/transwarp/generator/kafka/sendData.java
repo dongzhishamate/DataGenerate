@@ -4,13 +4,15 @@ package com.transwarp.generator.kafka;
 import com.transwarp.generator.kafka.ThroughPut.calculateThroughPut;
 import com.transwarp.generator.kafka.currentlimiting.Limiting;
 import com.transwarp.generator.kafka.kafka.KafkaSendClient;
+import com.transwarp.generator.kafka.email.MailConfig;
+import com.transwarp.generator.kafka.email.MailSender;
 import com.transwarp.generator.kafka.message.KafkaMessage;
 import com.transwarp.generator.kafka.message.KunDB;
 import com.transwarp.generator.kafka.partitioners.KafkaHashPartitioner;
 import org.apache.kafka.clients.producer.*;
-import org.apache.kafka.common.record.CompressionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.SpringApplication;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
@@ -25,11 +27,13 @@ public class sendData {
 
     Logger LOG = LoggerFactory.getLogger(sendData.class);
 
+    SpringApplication.run(sendData.class,args);
+
     //D:\实习汇总\星环实习\项目\DataGenerate\config_kunDB.properties
     Properties properties = new Properties();
     try {
       BufferedReader bufferedReader = new BufferedReader
-              (new FileReader("/root/zfy/config.properties"));
+              (new FileReader("D:\\实习汇总\\星环实习\\项目\\DataGenerate\\configKafka.properties"));
       properties.load(bufferedReader);
     } catch (FileNotFoundException e) {
       e.printStackTrace();
@@ -51,12 +55,34 @@ public class sendData {
     boolean isPartition = Boolean.valueOf(properties.getProperty("isPartition"));
     //生成的数据为kundb的数据
     boolean isKunDB = Boolean.valueOf(properties.getProperty("isKunDB"));
+    //kafka的max.in.flight.requests.per.connection属性，默认是5，如果要保证消息的正确性那要设为1
+    String maxInFlightRequestsPerConnection = String.valueOf(properties.getProperty("maxInFlightRequestsPerConnection"));
+    //是否自动设定各个列属性的类型，如果为true就默认为String，不然得自己设定
+    boolean isAutoColumnType = Boolean.valueOf(properties.getProperty("isAutoColumnType"));
+    boolean sendEmail = Boolean.valueOf(properties.getProperty("sendEmail"));
+    MailSender mailSender = null;
+    if (sendEmail) {
+      String senderAddress = String.valueOf(properties.getProperty("senderAddress"));
+      String recipientAddress = String.valueOf(properties.getProperty("recipientAddress"));
+      String senderAccount = String.valueOf(properties.getProperty("senderAccount"));
+      String senderPassword = String.valueOf(properties.getProperty("senderPassword"));
+      String mailSmtpAuth = String.valueOf(properties.getProperty("mailSmtpAuth"));
+      String mailTransportProtocol = String.valueOf(properties.getProperty("mailTransportProtocol"));
+      String mailStmpHost = String.valueOf(properties.getProperty("mailStmpHost"));
+      mailSender = new MailSender(new MailConfig(senderAddress, recipientAddress, senderAccount,
+              senderPassword, mailSmtpAuth, mailTransportProtocol, mailStmpHost));
+    }
+
 
 
     List<Integer> partitionIndex = new ArrayList<Integer>(0);
     if(properties.getProperty("partitionIndex") != null) {
       partitionIndex = Arrays.stream(properties.getProperty("partitionIndex").split(",")).
               map(s -> Integer.parseInt(s.trim())).collect(Collectors.toList());
+    }
+
+    if(isAutoColumnType) {
+
     }
 
 
@@ -75,6 +101,9 @@ public class sendData {
     kafkaProperties.put(ProducerConfig.ACKS_CONFIG,"1");
     kafkaProperties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, KafkaHashPartitioner.class);
     kafkaProperties.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, compressionCodec);
+    if(maxInFlightRequestsPerConnection != null){
+      kafkaProperties.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, maxInFlightRequestsPerConnection);
+    }
 
     KafkaSendClient kafkaClient = new KafkaSendClient(kafkaProperties);
     KafkaProducer kafkaProducer = kafkaClient.getProducer();
@@ -97,6 +126,16 @@ public class sendData {
           calculateThroughPut.isStop = true;
           System.out.println("send "+maxNum+" message finished ,now at :"+ new Date() +" ,spend time : " +
                   (System.currentTimeMillis() - startTime));
+          //发送email
+          if(sendEmail) {
+            try {
+              mailSender.sendMessage("send message finish at : " + new Date());
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
+          }
+          //close会阻塞等待之前所有的发送请求完成之后再关闭
+          kafkaProducer.close();
           break;
         }
       }
