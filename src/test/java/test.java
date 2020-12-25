@@ -1,11 +1,10 @@
-
-import com.transwarp.generator.kafka.kafka.KafkaSendClient;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.lang.management.ManagementFactory;
-import java.util.concurrent.ExecutionException;
 
 public class test {
   public static void main(String[] args) {
+
 //    KafkaSendClient kafkaSendClient = new KafkaSendClient("172.18.120.32:9092,172.18.120.32:9092,172.18.120.33:9092," +
 //            ",172.18.120.34:9092");
 //

@@ -11,8 +11,7 @@ import com.transwarp.generator.kafka.currentlimiting.Limiting;
 import com.transwarp.generator.kafka.kafka.KafkaSendClient;
 import com.transwarp.generator.kafka.message.KafkaMessage;
 import org.apache.kafka.clients.producer.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -20,8 +19,9 @@ public class sendData {
 
   public static void main(String[] args) {
 
+//    Logger LOG = LoggerFactory.getLogger(sendData.class);
 
-    String path = "D:\\实习汇总\\星环实习\\项目\\DataGenerate\\config.properties";
+    String path = "/root/zfy/DataGenerate2.0/config.properties";
     if(args.length != 0){
       path = args[0];
     }
@@ -78,7 +78,7 @@ public class sendData {
 
 class InsertDataTask implements Runnable {
 
-  Logger LOG = LoggerFactory.getLogger(InsertDataTask.class);
+//  Logger LOG = LoggerFactory.getLogger(InsertDataTask.class);
 
   private Boolean isLimiting = false;
   //当前数据量
@@ -157,7 +157,7 @@ class InsertDataTask implements Runnable {
           @Override
           public void onCompletion(RecordMetadata recordMetadata, Exception e) {
             if (e != null) {
-              LOG.error("producer send failed. Exception [{}].", e);
+//              LOG.error("producer send failed. Exception [{}].", e);
               throw new RuntimeException("producer failed.", e);
             }
           }
