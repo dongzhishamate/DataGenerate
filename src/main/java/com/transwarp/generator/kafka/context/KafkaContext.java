@@ -2,33 +2,35 @@ package com.transwarp.generator.kafka.context;
 
 import lombok.Data;
 
+import java.util.Properties;
+
 @Data
 public class KafkaContext {
 
-  // kafka 连接以及安全相关  暂时不支持guardian token方式，因此使用keyTab
   private String bootstrapServerAddress;
-  private String zkAddress;
-  private boolean kafkaSecuredMode;
-  private String saslKerberosServiceName;
-  private String principal;
-  private String principalStream;
-  private String keytabPath;
-  private String keytabPathStream;
+  private String ZkAddress;
+  private String kafkaTopic;
+  private Integer kafkaRefactor = 3;
+  private Integer intervalFlushTime;
+  private String compressionCodec = "snappy";
+  private String maxInFlightRequestsPerConnection = "5";
+  private Integer batchSize = 16384;
+  private Integer lingerMs = 100;
+  private Long bufferSize = 33554432L;
+  private String ack = "1";
 
-  private int kafkaRefactor;
-  private int kafkaConsumerTimeOut;
-  private int intervalFlushTime;
-
-  //是否永久执行数据插入
-  private boolean isInsertUnlimited;
-
-  //如果执行有限制的话设置插入的数据量
-  private long maxNum;
-
-  //是否开启client插入数据时的平均吞吐量计算，默认5s一次
-  private Boolean startThroughputCalculate;
-
-  //打印吞吐量的平均间隔
-  private Integer ThroughputCalculateInterval;
-
+  public KafkaContext(Properties properties) {
+    this.bootstrapServerAddress = String.valueOf(properties.getProperty("bootstrapServerAddress"));
+    this.compressionCodec = String.valueOf(properties.getProperty("compressionCodec"));
+    this.kafkaTopic = properties.getProperty("kafkaTopic");
+    //kafka的max.in.flight.requests.per.connection属性，默认是5，如果要保证消息的正确性那要设为1
+    this.maxInFlightRequestsPerConnection = String.valueOf(properties.getProperty("maxInFlightRequestsPerConnection"));
+    this.batchSize = Integer.valueOf(properties.getProperty("batchSize"));
+    //linger.ms默认是0
+    this.lingerMs = Integer.valueOf(properties.getProperty("lingerMs"));
+    //缓冲区的大小
+    this.bufferSize = Long.valueOf(properties.getProperty("bufferSize"));
+    //ACK
+    String ack = properties.getProperty("ack");
+  }
 }

@@ -1,141 +1,129 @@
 package com.transwarp.generator.kafka;
 
-
-import com.transwarp.generator.kafka.ThroughPut.calculateThroughPut;
+import com.transwarp.generator.kafka.context.Context;
+import com.transwarp.generator.kafka.context.KafkaContext;
+import com.transwarp.generator.kafka.context.SendMessageContext;
+import com.transwarp.generator.kafka.context.ThreadPoolContext;
+import com.transwarp.generator.kafka.email.MailSender;
+import com.transwarp.generator.kafka.message.KunDB;
+import com.transwarp.generator.kafka.throughPut.CalculateThroughPut;
 import com.transwarp.generator.kafka.currentlimiting.Limiting;
 import com.transwarp.generator.kafka.kafka.KafkaSendClient;
-import com.transwarp.generator.kafka.email.MailConfig;
-import com.transwarp.generator.kafka.email.MailSender;
 import com.transwarp.generator.kafka.message.KafkaMessage;
-import com.transwarp.generator.kafka.message.KunDB;
-import com.transwarp.generator.kafka.partitioners.KafkaHashPartitioner;
 import org.apache.kafka.clients.producer.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.SpringApplication;
-
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.concurrent.*;
 
 public class sendData {
 
   public static void main(String[] args) {
 
-    Logger LOG = LoggerFactory.getLogger(sendData.class);
 
-    SpringApplication.run(sendData.class,args);
-
-    //D:\实习汇总\星环实习\项目\DataGenerate\config_kunDB.properties
-    Properties properties = new Properties();
-    try {
-      BufferedReader bufferedReader = new BufferedReader
-              (new FileReader("D:\\实习汇总\\星环实习\\项目\\DataGenerate\\configKafka.properties"));
-      properties.load(bufferedReader);
-    } catch (FileNotFoundException e) {
-      e.printStackTrace();
-    } catch (IOException e) {
-      e.printStackTrace();
+    String path = "D:\\实习汇总\\星环实习\\项目\\DataGenerate\\config.properties";
+    if(args.length != 0){
+      path = args[0];
     }
-
-    System.out.println(properties.toString());
-
-    String compressionCodec = String.valueOf(properties.getProperty("compressionCodec"));
-    boolean isInsertUnlimited = Boolean.valueOf(properties.getProperty("isInsertUnlimited"));
-    long maxNum = Long.valueOf(properties.getProperty("maxNum"));
-    boolean startThroughputCalculate = Boolean.valueOf(properties.getProperty("startThroughputCalculate"));
-    int ThroughputCalculateInterval = Integer.valueOf(properties.getProperty("ThroughputCalculateInterval"));
-    String kafkaTopic = properties.getProperty("kafkaTopic");
-    int columnNum = Integer.valueOf(properties.getProperty("columnNum"));
-    boolean isLimiting = Boolean.valueOf(properties.getProperty("isLimiting"));
-    int tps = Integer.valueOf(properties.getProperty("tps"));
-    boolean isPartition = Boolean.valueOf(properties.getProperty("isPartition"));
-    //生成的数据为kundb的数据
-    boolean isKunDB = Boolean.valueOf(properties.getProperty("isKunDB"));
-    //kafka的max.in.flight.requests.per.connection属性，默认是5，如果要保证消息的正确性那要设为1
-    String maxInFlightRequestsPerConnection = String.valueOf(properties.getProperty("maxInFlightRequestsPerConnection"));
-    //是否自动设定各个列属性的类型，如果为true就默认为String，不然得自己设定
-    boolean isAutoColumnType = Boolean.valueOf(properties.getProperty("isAutoColumnType"));
-    boolean sendEmail = Boolean.valueOf(properties.getProperty("sendEmail"));
-    MailSender mailSender = null;
-    if (sendEmail) {
-      String senderAddress = String.valueOf(properties.getProperty("senderAddress"));
-      String recipientAddress = String.valueOf(properties.getProperty("recipientAddress"));
-      String senderAccount = String.valueOf(properties.getProperty("senderAccount"));
-      String senderPassword = String.valueOf(properties.getProperty("senderPassword"));
-      String mailSmtpAuth = String.valueOf(properties.getProperty("mailSmtpAuth"));
-      String mailTransportProtocol = String.valueOf(properties.getProperty("mailTransportProtocol"));
-      String mailStmpHost = String.valueOf(properties.getProperty("mailStmpHost"));
-      mailSender = new MailSender(new MailConfig(senderAddress, recipientAddress, senderAccount,
-              senderPassword, mailSmtpAuth, mailTransportProtocol, mailStmpHost));
-    }
-
-
-
-    List<Integer> partitionIndex = new ArrayList<Integer>(0);
-    if(properties.getProperty("partitionIndex") != null) {
-      partitionIndex = Arrays.stream(properties.getProperty("partitionIndex").split(",")).
-              map(s -> Integer.parseInt(s.trim())).collect(Collectors.toList());
-    }
-
-    if(isAutoColumnType) {
-
-    }
-
+    Context context = new Context(path);
+    ThreadPoolContext threadPoolContext = context.getThreadPoolContext();
+    SendMessageContext sendMessageContext = context.getSendMessageContext();
+    KafkaContext kafkaContext = context.getKafkaContext();
 
     Long startTime = System.currentTimeMillis();
-    Long index = 0L;
     System.out.println("start = " + new Date());
     //计算client吞吐
-    Thread thread = new Thread(new calculateThroughPut());
+    Thread thread = new Thread(new CalculateThroughPut());
     thread.start();
 
-    Properties kafkaProperties = new Properties();
+    try {
+      KafkaSendClient kafkaSendClient = new KafkaSendClient(context.getKafkaContext());
 
-    kafkaProperties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG,properties.getProperty("bootstrapServerAddress"));
-    kafkaProperties.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,"org.apache.kafka.common.serialization.StringSerializer");
-    kafkaProperties.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,"org.apache.kafka.common.serialization.StringSerializer");
-    kafkaProperties.put(ProducerConfig.ACKS_CONFIG,"1");
-    kafkaProperties.put(ProducerConfig.PARTITIONER_CLASS_CONFIG, KafkaHashPartitioner.class);
-    kafkaProperties.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, compressionCodec);
-    if(maxInFlightRequestsPerConnection != null){
-      kafkaProperties.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, maxInFlightRequestsPerConnection);
+      //创建线程池,countDownLatch标记剩余任务数
+      CountDownLatch countDownLatch = new CountDownLatch(threadPoolContext.getThreadNum());
+      BlockingQueue<Runnable> queue = new LinkedBlockingDeque<>(100);
+      ThreadPoolExecutor poolExecutor = new ThreadPoolExecutor(threadPoolContext.getThreadNum(),
+              threadPoolContext.getThreadNum(), 1000,
+              TimeUnit.SECONDS, queue);
+
+      for (int i=0;i<threadPoolContext.getThreadNum();i++) {
+        KafkaProducer kafkaProducer = kafkaSendClient.getProducer();
+        InsertDataTask insertDataTask = new InsertDataTask(sendMessageContext, kafkaProducer, startTime,
+                kafkaContext.getKafkaTopic(), countDownLatch, threadPoolContext);
+        System.out.println("task "+i+"start");
+        poolExecutor.execute(insertDataTask);
+      }
+
+      //等所有任务结束之后发送email
+      try {
+        countDownLatch.await();
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+      if(sendMessageContext.getSendEmail()) {
+        MailSender mailSender = new MailSender(context.getEmailContext());
+        try {
+          mailSender.sendMessage("send message finish at : " + new Date());
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+    }catch (Exception e) {
+      e.printStackTrace();
+      CalculateThroughPut.isStop = true;
     }
 
-    KafkaSendClient kafkaClient = new KafkaSendClient(kafkaProperties);
-    KafkaProducer kafkaProducer = kafkaClient.getProducer();
+  }
+}
 
+class InsertDataTask implements Runnable {
+
+  Logger LOG = LoggerFactory.getLogger(InsertDataTask.class);
+
+  private Boolean isLimiting = false;
+  //当前数据量
+  private Long index = 0l;
+  private KafkaProducer kafkaProducer;
+  private Long startTime;
+  private SendMessageContext sendMessageContext;
+  private ThreadPoolContext threadPoolContext;
+  private String kafkaTopic;
+  CountDownLatch countDownLatch;
+
+  public InsertDataTask(SendMessageContext sendMessageContext, KafkaProducer kafkaProducer, long startTime,
+                        String kafkaTopic, CountDownLatch countDownLatch, ThreadPoolContext threadPoolContext) {
+    this.sendMessageContext = sendMessageContext;
+    this.startTime = startTime;
+    this.kafkaProducer = kafkaProducer;
+    this.kafkaTopic = kafkaTopic;
+    this.countDownLatch = countDownLatch;
+    this.threadPoolContext = threadPoolContext;
+  }
+
+  @Override
+  public void run() {
     //限流
     if(isLimiting){
-      Limiting limiting =new Limiting(tps);
+      Limiting limiting =new Limiting(sendMessageContext.getTps());
       Thread thread1 = new Thread(limiting);
       thread1.start();
     }
     ProducerRecord record;
 
     KafkaMessage kafkaMessage = new KafkaMessage();
-    KunDB kunDB = new KunDB(maxNum);
+//    KunDB kunDB = new KunDB(maxNum);
 
     while (true) {
-      if(!isInsertUnlimited) {
-        if(index == maxNum) {
+      if(!sendMessageContext.getIsInsertUnlimited()) {
+        if(index == sendMessageContext.getMaxNum()) {
           kafkaProducer.flush();
-          calculateThroughPut.isStop = true;
-          System.out.println("send "+maxNum+" message finished ,now at :"+ new Date() +" ,spend time : " +
+          CalculateThroughPut.isStop = true;
+          System.out.println("send "+ sendMessageContext.getMaxNum() +" message finished ,now at :"+ new Date() +" ," +
+                  "spend time : " +
                   (System.currentTimeMillis() - startTime));
-          //发送email
-          if(sendEmail) {
-            try {
-              mailSender.sendMessage("send message finish at : " + new Date());
-            } catch (Exception e) {
-              e.printStackTrace();
-            }
-          }
           //close会阻塞等待之前所有的发送请求完成之后再关闭
           kafkaProducer.close();
+          countDownLatch.countDown();
           break;
         }
       }
@@ -144,27 +132,32 @@ public class sendData {
         continue;
       }
       else {
-        if(startThroughputCalculate && (index % ThroughputCalculateInterval == 0 || (index == maxNum))){
-          if(isKunDB) {
-            record = kunDB.genKafkaRecord(kafkaTopic, true);
+        if(sendMessageContext.getStartThroughputCalculate() &&
+                (index % sendMessageContext.getThroughputCalculateInterval() == 0 || (index == sendMessageContext.getMaxNum()))){
+          if(sendMessageContext.getIsKunDB()) {
+            record = KunDB.genKafkaRecord(kafkaTopic, true);
           } else{
-            record = kafkaMessage.genKafkaRecord(kafkaTopic ,columnNum ,true, isPartition, partitionIndex);
+            record = kafkaMessage.genKafkaRecord(kafkaTopic ,sendMessageContext.getColumnNum() ,true,
+                    sendMessageContext.getIsPartition(),
+                    sendMessageContext.getPartitionIndex());
           }
         } else{
-          if(isKunDB) {
-            record = kunDB.genKafkaRecord(kafkaTopic, false);
+          if(sendMessageContext.getIsKunDB()) {
+            record = KunDB.genKafkaRecord(kafkaTopic, false);
           } else {
-            record = kafkaMessage.genKafkaRecord(kafkaTopic , columnNum ,false, isPartition, partitionIndex);
+            record = kafkaMessage.genKafkaRecord(kafkaTopic , sendMessageContext.getColumnNum(),false,
+                    sendMessageContext.getIsPartition(),
+                    sendMessageContext.getPartitionIndex());
           }
         }
         index ++;
-        calculateThroughPut.sum ++;
+        CalculateThroughPut.add();
 
         kafkaProducer.send(record, new Callback() {
           @Override
           public void onCompletion(RecordMetadata recordMetadata, Exception e) {
             if (e != null) {
-              LOG.error("producer failed. Exception [{}].", e);
+              LOG.error("producer send failed. Exception [{}].", e);
               throw new RuntimeException("producer failed.", e);
             }
           }

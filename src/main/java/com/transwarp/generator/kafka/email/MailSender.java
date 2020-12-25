@@ -1,5 +1,7 @@
 package com.transwarp.generator.kafka.email;
 
+import com.transwarp.generator.kafka.context.EmailContext;
+
 import javax.mail.Message;
 import javax.mail.Session;
 import javax.mail.Transport;
@@ -21,11 +23,11 @@ public class MailSender {
 
   public MailSender(){}
 
-  public MailSender(MailConfig mailConfig) {
-    this.senderAddress = mailConfig.getSenderAddress();
-    this.recipientAddress = mailConfig.getRecipientAddress();
-    this.senderAccount = mailConfig.getSenderAccount();
-    this.senderPassword = mailConfig.getSenderPassword();
+  public MailSender(EmailContext emailContext) {
+    this.senderAddress = emailContext.getSenderAddress();
+    this.recipientAddress = emailContext.getRecipientAddress();
+    this.senderAccount = emailContext.getSenderAccount();
+    this.senderPassword = emailContext.getSenderPassword();
   }
 
   public void sendMessage(String message) throws Exception {

@@ -12,7 +12,7 @@ public class KunDB {
     this.max = max;
   }
 
-  public ProducerRecord genKafkaRecord(String kafkaTopic ,boolean isPrint) {
+  public static ProducerRecord genKafkaRecord(String kafkaTopic ,boolean isPrint) {
     String valuesString = getKunDBMessage(isPrint);
     ProducerRecord record = new ProducerRecord<String, String>(kafkaTopic, String.valueOf(i), valuesString);
     i++;

@@ -1,18 +1,19 @@
-package com.transwarp.generator.kafka.ThroughPut;
+package com.transwarp.generator.kafka.throughPut;
 
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class calculateThroughPut implements Runnable {
+public class CalculateThroughPut implements Runnable {
 
-  public static Long sum = 0L;
+  public static AtomicLong sum = new AtomicLong(0);
   public static boolean isStop = false;
 
   SimpleDateFormat sdFormat = new SimpleDateFormat("yyyy-MM-dd,HH:mm:ss");
 
   public static void add() {
-    sum++;
+    sum.incrementAndGet();
   }
 
 
@@ -24,8 +25,8 @@ public class calculateThroughPut implements Runnable {
       }
       try {
         Thread.sleep(5000);
-        System.out.println("[calculateThroughPut] " + sum / 5.0 + " ,time= ," + sdFormat.format(new Date()));
-        sum = 0L;
+        System.out.println("[CalculateThroughPut] " + sum.get() / 5.0 + " ,time= ," + sdFormat.format(new Date()));
+        sum.set(0);
       } catch (InterruptedException e) {
         e.printStackTrace();
       }
